@@ -42,6 +42,7 @@ the following pages:
     block
     labels
     serialization
+    atomistic
     CHANGELOG.md
 
 All the :ref:`operations <python-api-operations>` are also available in the
