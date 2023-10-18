@@ -145,6 +145,25 @@ generate_export_header(metatensor_torch
 target_compile_definitions(metatensor_torch PRIVATE metatensor_torch_EXPORTS)
 
 
+include(FetchContent)
+FetchContent_Declare(nlohmann_json
+    URL https://github.com/nlohmann/json/releases/download/v3.11.2/json.tar.xz
+    URL_HASH SHA256=8c4b26bf4b422252e13f332bc5e388ec0ab5c3443d24399acb675e68278d341f
+    DOWNLOAD_EXTRACT_TIMESTAMP ON
+)
+if (CMAKE_VERSION VERSION_GREATER 3.18)
+    FetchContent_MakeAvailable(nlohmann_json)
+else()
+    if (NOT metatensor_POPULATED)
+        FetchContent_Populate(nlohmann_json)
+    endif()
+
+    add_subdirectory(${nlohmann_json_SOURCE_DIR} ${nlohmann_json_BINARY_DIR})
+endif()
+
+target_link_libraries(metatensor_torch PRIVATE nlohmann_json::nlohmann_json)
+
+
 if (METATENSOR_TORCH_TESTS)
     enable_testing()
     add_subdirectory(tests)
