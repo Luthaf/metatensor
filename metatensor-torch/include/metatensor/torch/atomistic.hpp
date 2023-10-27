@@ -24,8 +24,11 @@ using System = torch::intrusive_ptr<SystemHolder>;
 /// Options for the calculation of a neighbors list
 class METATENSOR_TORCH_EXPORT NeighborsListOptionsHolder final: public torch::CustomClassHolder {
 public:
-    /// Create `NeighborsListOptions` with the given cutoff and full_list
-    NeighborsListOptionsHolder(double cutoff, bool full_list): cutoff_(cutoff), full_list_(full_list) {}
+    /// Create `NeighborsListOptions` with the given `cutoff` and `full_list`.
+    ///
+    /// `requestor` can be used to store information about who requested the
+    /// neighbors list.
+    NeighborsListOptionsHolder(double cutoff, bool full_list, std::string requestor = "");
     ~NeighborsListOptionsHolder() override = default;
 
     /// Spherical cutoff radius for this neighbors list
@@ -39,8 +42,16 @@ public:
         return full_list_;
     }
 
+    std::vector<std::string> requestors() const {
+        return requestors_;
+    }
+
+    void add_requestor(std::string requestor);
+
     /// Implementation of Python's `__repr__`
     std::string repr() const;
+    /// Implementation of Python's `__str__`
+    std::string str() const;
 
     std::string to_json() const;
     static NeighborsListOptions from_json(const std::string& json);
@@ -48,14 +59,16 @@ public:
 private:
     double cutoff_;
     bool full_list_;
+    std::vector<std::string> requestors_;
 };
 
-/// check `NeighborsListOptions` for equality
+/// Check `NeighborsListOptions` for equality. The `requestors` list is ignored
+/// when checking for equality
 inline bool operator==(const NeighborsListOptions& lhs, const NeighborsListOptions& rhs) {
     return lhs->cutoff() == rhs->cutoff() && lhs->full_list() == rhs->full_list();
 }
 
-/// check `NeighborsListOptions` for inequality
+/// Check `NeighborsListOptions` for inequality.
 inline bool operator!=(const NeighborsListOptions& lhs, const NeighborsListOptions& rhs) {
     return !(lhs == rhs);
 }
