@@ -259,7 +259,12 @@ public:
 private:
     struct nl_options_compare {
         bool operator()(const NeighborsListOptions& a, const NeighborsListOptions& b) const {
-            assert(a->length_unit() == b->length_unit());
+            if (a->length_unit() != b->length_unit()) {
+                C10_THROW_ERROR(ValueError,
+                    "all neighbors lists added to a System must have the same "
+                    "length unit as the model"
+                );
+            }
             if (a->full_list() == b->full_list()) {
                 return a->cutoff() < b->cutoff();
             } else {
