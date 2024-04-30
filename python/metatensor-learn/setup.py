@@ -1,7 +1,6 @@
 import os
 import subprocess
 import sys
-import uuid
 
 import packaging.version
 from setuptools import setup
@@ -39,13 +38,40 @@ class sdist_git_version(sdist):
     """
 
     def run(self):
-        with open("n_commits_since_last_tag", "w") as fd:
-            fd.write(str(n_commits_since_last_tag()))
+        if os.path.exists("version_with_git_info"):
+            os.unlink("version_with_git_info")
+
+        version = create_version_number(METATENSOR_LEARN_VERSION)
+        with open("version_with_git_info", "w") as fd:
+            fd.write(version)
 
         # run original sdist
         super().run()
 
-        os.unlink("n_commits_since_last_tag")
+        os.unlink("version_with_git_info")
+
+
+def run_script(script, args, return_on_error):
+    assert os.path.exists(script)
+
+    output = subprocess.run(
+        [sys.executable, script, *args],
+        stderr=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        encoding="utf8",
+    )
+
+    if output.returncode != 0:
+        raise Exception(
+            f"failed to run script at '{script}'.\n"
+            f"stdout: {output.stdout}\n"
+            f"stderr: {output.stderr}\n"
+        )
+    elif output.stderr:
+        print(output.stderr, file=sys.stderr)
+        return return_on_error
+    else:
+        return output.stdout
 
 
 def n_commits_since_last_tag():
@@ -54,39 +80,33 @@ def n_commits_since_last_tag():
     since the last tag. Otherwise, this always returns 0.
     """
     script = os.path.join(ROOT, "..", "..", "scripts", "n-commits-since-last-tag.py")
-    assert os.path.exists(script)
+    TAG_PREFIX = "metatensor-core-v"
+    result = run_script(script, args=[TAG_PREFIX], return_on_error=0)
+    return int(result)
 
-    TAG_PREFIX = "metatensor-learn-v"
-    output = subprocess.run(
-        [sys.executable, script, TAG_PREFIX],
-        stderr=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        encoding="utf8",
-    )
 
-    if output.returncode != 0:
-        raise Exception(
-            "failed to get number of commits since last tag.\n"
-            f"stdout: {output.stdout}\n"
-            f"stderr: {output.stderr}\n"
-        )
-    elif output.stderr:
-        print(output.stderr, file=sys.stderr)
-        return 0
-    else:
-        return int(output.stdout)
+def git_build_id(include_sha):
+    """
+    If git is available, create a build id for the sdist/wheel looking like
+    `<commit-sha>.dirty<datetime>`, where <commit-sha> is the latest commit, only
+    included if ``include_sha=True``; and <datetime> is the modification time of the
+    latest non-committed modified file (only included if there is such a file)
+    """
+    script = os.path.join(ROOT, "..", "..", "scripts", "git-build-id.py")
+    result = run_script(script, args=[str(include_sha)], return_on_error="")
+    return result.strip()
 
 
 def create_version_number(version):
     version = packaging.version.parse(version)
 
-    if os.path.exists("n_commits_since_last_tag"):
+    if os.path.exists("version_with_git_info"):
         # we are building from a sdist, without git available, but the git
-        # version was recorded in the `n_commits_since_last_tag` file
-        with open("n_commits_since_last_tag") as fd:
-            n_commits = int(fd.read().strip())
-    else:
-        n_commits = n_commits_since_last_tag()
+        # version was recorded in the `version_with_git_info` file
+        with open("version_with_git_info") as fd:
+            return fd.read().strip()
+
+    n_commits = n_commits_since_last_tag()
 
     if n_commits != 0:
         # if we have commits since the last tag, this mean we are in a pre-release of
@@ -108,6 +128,11 @@ def create_version_number(version):
         version._version = version._version._replace(pre=pre)
         version._version = version._version._replace(dev=("dev", n_commits))
 
+    # also record the git sha / git dirty state in the build id
+    build_id = git_build_id(include_sha=(n_commits != 0))
+    if build_id != "":
+        version._version = version._version._replace(local=[build_id])
+
     return str(version)
 
 
@@ -127,12 +152,8 @@ if __name__ == "__main__":
 
     if not METATENSOR_NO_LOCAL_DEPS and os.path.exists(METATENSOR_OPERATIONS):
         # we are building from a git checkout or full repo archive
-
-        # add a random uuid to the file url to prevent pip from using a cached
-        # wheel for metatensor-core, and force it to re-build from scratch
-        uuid = uuid.uuid4()
         install_requires.append(
-            f"metatensor-operations @ file://{METATENSOR_OPERATIONS}?{uuid}"
+            f"metatensor-operations @ file://{METATENSOR_OPERATIONS}"
         )
     else:
         # we are building from a sdist/installing from a wheel
